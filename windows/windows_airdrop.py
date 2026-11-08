@@ -7,7 +7,7 @@ import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from airdrop_core import Node
+from airdrop_core import HTTP_PORT, Node, local_ipv4s
 
 try:
     import pystray
@@ -63,7 +63,7 @@ class App:
         self.tray = None
         self.root = tk.Tk()
         self.root.title(APP)
-        self.root.geometry("420x440")
+        self.root.geometry("460x520")
         self.root.protocol("WM_DELETE_WINDOW", self.hide)
         self.peers = []
         self.node = Node(self.conf["name"], self.conf["save_dir"], self.conf["pin"],
@@ -87,6 +87,10 @@ class App:
     def build_ui(self):
         r = self.root
         ttk.Label(r, text=f"This PC: {self.conf['name']}", font=("Segoe UI", 11, "bold")).pack(pady=(10, 0))
+        urls = "   or   ".join(f"http://{ip}:{HTTP_PORT}" for ip in sorted(local_ipv4s())) or "(no network)"
+        box = ttk.LabelFrame(r, text="iPhone / iPad / Mac: open this address in Safari to send files here")
+        box.pack(fill="x", padx=10, pady=(10, 0))
+        e = ttk.Entry(box); e.insert(0, urls); e.config(state="readonly"); e.pack(fill="x", padx=6, pady=6)
         ttk.Label(r, text="Nearby devices (Android phones running the app):").pack(anchor="w", padx=10, pady=(10, 0))
         self.lb = tk.Listbox(r, height=8, exportselection=False)
         self.lb.pack(fill="both", expand=True, padx=10, pady=5)

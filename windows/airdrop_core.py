@@ -23,6 +23,36 @@ PEER_TTL = 12.0
 CHUNK = 256 * 1024
 
 
+PAGE = """<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Send to %(name)s</title>
+<style>body{font-family:-apple-system,system-ui,sans-serif;max-width:480px;margin:24px auto;padding:0 16px}
+button,input{font-size:18px;margin:8px 0;width:100%%;padding:12px;box-sizing:border-box}
+button{background:#1e88e5;color:#fff;border:0;border-radius:10px}progress{width:100%%}
+.f{margin:10px 0;font-size:14px;word-break:break-all}</style></head><body>
+<h2>Send files to %(name)s</h2>
+<input type="file" id="files" multiple>
+%(pin)s
+<button id="go">Send</button><div id="out"></div>
+<script>
+document.getElementById('go').onclick=()=>{
+ const out=document.getElementById('out');out.innerHTML='';
+ const pin=document.getElementById('pin');
+ for(const f of document.getElementById('files').files){
+  const d=document.createElement('div');d.className='f';d.textContent=f.name;
+  const p=document.createElement('progress');p.max=100;p.value=0;d.appendChild(p);out.appendChild(d);
+  const x=new XMLHttpRequest();
+  x.open('PUT','/send?name='+encodeURIComponent(f.name));
+  if(pin&&pin.value)x.setRequestHeader('X-Pin',pin.value);
+  x.setRequestHeader('X-Device',encodeURIComponent('Browser'));
+  x.upload.onprogress=e=>{p.value=100*e.loaded/e.total};
+  x.onload=()=>{d.append(x.status==200?' \u2705 sent':' \u274c '+x.responseText)};
+  x.onerror=()=>{d.append(' \u274c failed')};
+  x.send(f);
+ }};
+</script></body></html>"""
+
+
 def sanitize(name: str) -> str:
     name = os.path.basename(name.replace("\\", "/"))
     name = re.sub(r'[<>:"|?*\x00-\x1f]', "_", name).strip(" .")
@@ -87,6 +117,19 @@ class Node:
             def _reply(self, code, text):
                 body = text.encode()
                 self.send_response(code)
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Connection", "close")
+                self.end_headers()
+                self.wfile.write(body)
+                self.close_connection = True
+
+            def do_GET(self):
+                if urllib.parse.urlparse(self.path).path != "/":
+                    return self._reply(404, "not found")
+                pin = '<input id="pin" placeholder="PIN" inputmode="numeric">' if node.pin else ""
+                body = (PAGE % {"name": node.name, "pin": pin}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(body)))
                 self.send_header("Connection", "close")
                 self.end_headers()

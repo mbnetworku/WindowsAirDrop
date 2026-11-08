@@ -12,6 +12,11 @@ Push to GitHub and download the artifacts from the **Actions -> Build** run:
 Or run from source: `cd windows && pip install -r requirements.txt && python windows_airdrop.py`
 (Android: open `android/` in Android Studio.)
 
+## From iPhone / iPad / Mac (Apple "AirDrop" replacement)
+True AirDrop cannot work with Windows (Apple-proprietary radio protocol). Instead, open the address shown at
+the top of the Windows app (e.g. `http://192.168.1.20:53317`) in Safari on the Apple device, pick files/photos, tap Send.
+Tip: Share sheet -> Add to Home Screen for one-tap access later.
+
 ## Use
 1. Open the app once on both devices (same Wi-Fi). The Windows app minimises to the tray and starts with Windows.
    On first launch, allow it through **Windows Firewall (Private networks)** - needed for TCP 53317 and UDP 53318.
