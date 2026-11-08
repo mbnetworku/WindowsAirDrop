@@ -264,3 +264,94 @@ class Node:
                 raise RuntimeError(f"{resp.status}: {body}")
         finally:
             conn.close()
+
+
+class AppleBridge:
+    """Client for airdrop-bridge (Linux VM with USB Wi-Fi running OWL + OpenDrop)."""
+
+    def __init__(self, url, token):
+        u = urllib.parse.urlparse(url if "://" in url else "http://" + url)
+        self.host, self.port = u.hostname, u.port or 8765
+        self.token = token
+
+    def _req(self, method, path, timeout=10):
+        conn = http.client.HTTPConnection(self.host, self.port, timeout=timeout)
+        try:
+            conn.request(method, path, headers={"X-Token": self.token})
+            r = conn.getresponse()
+            return r.status, r.read()
+        finally:
+            conn.close()
+
+    def status(self):
+        code, body = self._req("GET", "/status", timeout=4)
+        if code != 200:
+            raise RuntimeError(f"bridge answered {code}: {body.decode(errors='replace')}")
+        return json.loads(body)
+
+    def peers(self):
+        code, body = self._req("GET", "/peers", timeout=4)
+        if code != 200:
+            return []
+        return [{"id": p["id"], "name": p["name"], "ip": "AirDrop", "os": "apple",
+                 "pin": False, "via": "bridge"} for p in json.loads(body)]
+
+    def send_file(self, peer, path, progress=None):
+        size = os.path.getsize(path)
+        q = urllib.parse.urlencode({"to": peer["id"], "name": os.path.basename(path)})
+        conn = http.client.HTTPConnection(self.host, self.port, timeout=600)
+        try:
+            conn.putrequest("PUT", "/send?" + q)
+            conn.putheader("Content-Length", str(size))
+            conn.putheader("X-Token", self.token)
+            conn.endheaders()
+            sent = 0
+            with open(path, "rb") as f:
+                while True:
+                    chunk = f.read(CHUNK)
+                    if not chunk:
+                        break
+                    conn.send(chunk)
+                    sent += len(chunk)
+                    if progress:
+                        progress(sent, size)
+            r = conn.getresponse()  # returns after the AirDrop transfer finished
+            body = r.read().decode(errors="replace")
+            if r.status != 200:
+                try:
+                    body = json.loads(body).get("error", body)
+                except ValueError:
+                    pass
+                raise RuntimeError(body or f"bridge answered {r.status}")
+        finally:
+            conn.close()
+
+    def pull_received(self, save_dir):
+        """Download files the bridge received from Apple devices; returns saved paths."""
+        code, body = self._req("GET", "/received", timeout=5)
+        if code != 200:
+            return []
+        saved = []
+        os.makedirs(save_dir, exist_ok=True)
+        for item in json.loads(body):
+            name = urllib.parse.quote(item["name"])
+            conn = http.client.HTTPConnection(self.host, self.port, timeout=60)
+            try:
+                conn.request("GET", f"/received/{name}", headers={"X-Token": self.token})
+                r = conn.getresponse()
+                if r.status != 200:
+                    r.read()
+                    continue
+                final = unique_path(save_dir, sanitize(item["name"]))
+                with open(final + ".part", "wb") as f:
+                    while True:
+                        d = r.read(CHUNK)
+                        if not d:
+                            break
+                        f.write(d)
+                os.replace(final + ".part", final)
+            finally:
+                conn.close()
+            self._req("DELETE", f"/received/{name}")
+            saved.append(final)
+        return saved
