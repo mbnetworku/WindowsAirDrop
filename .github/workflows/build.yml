@@ -31,3 +31,24 @@ jobs:
         with:
           name: WindowsAirDrop-windows-exe
           path: windows/dist/WindowsAirDrop.exe
+
+  release:
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: dist, merge-multiple: true }
+      - run: mv dist/app-debug.apk dist/WindowsAirDrop.apk
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: WindowsAirDrop (latest build)
+          prerelease: true
+          make_latest: true
+          target_commitish: ${{ github.sha }}
+          body: "Download WindowsAirDrop.exe for Windows, WindowsAirDrop.apk for Android."
+          files: |
+            dist/WindowsAirDrop.exe
+            dist/WindowsAirDrop.apk
